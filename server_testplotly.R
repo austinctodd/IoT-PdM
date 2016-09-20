@@ -177,7 +177,7 @@ shinyServer(function(input, output, session) {
     values$run <- abs(isolate(values$run)-1)
   })
 
-# Plot time series chart
+  # Plot time series chart
   output$timeseries <- renderPlotly({
 
     p <- plot_ly(rtdata(),x = times/60, y = bmc,
@@ -244,50 +244,5 @@ shinyServer(function(input, output, session) {
     datapoint <- as.numeric(eventdata$pointNumber)[1]
     rotangle <- ((rtdata()$bmc[datapoint]-train_ranges()[1])/(2*train_ranges()[2]))*(25/3.0)
 
-    base_plot <- plot_ly(
-      type = "pie",
-      values = c(50, 16.67, 16.67, 16.67),
-      labels = c("Error Log Level Meter", "Cold", "Normal", "Hot"),
-      rotation = 90,
-      direction = "clockwise",
-      hole = 0.3,
-      textinfo = "label",
-      textposition = "inside",
-      hoverinfo = "none",
-      domain = list(x = c(0, 0.48), y = c(0, 1)),
-      marker = list(colors = c('rgb(255, 255, 255)', 'rgb(100,100,250)', 'rgb(100,250,100)', 'rgb(250,100,100)')),
-      showlegend= FALSE
-    )
-    base_plot <- layout(
-      base_plot,
-      shapes = list(
-          list(
-            type = 'path',
-            path = paste('M',#x2 = x cos f - y sin f, y2 = y cos f + x sin f
-                          toString(0.2345),#+(-0.005*cospi(rotangle))),
-                          toString(0.5),#+(-0.005*sinpi(rotangle))),
-                          'L',
-                          toString(0.21),#4.65,25.01826,25.9489,21.69281
-                          toString(0.55),
-                          'L',
-                          toString(0.245),#+(0.005*cospi(rotangle))),
-                          toString(0.5),#25.40873+(0.005*sinpi(rotangle))),
-                          'Z'),
-            xref = 'paper',
-            yref = 'paper',
-            fillcolor = 'rgba(0, 0, 0, 0.5)'
-          )
-        ),
-      annotations = list(
-          list(
-            xref = 'paper',
-            yref = 'paper',
-            x = 0.21,
-            y = 0.45,
-            showarrow = FALSE,
-            text = format(round(rotangle,2),nsmall=2)#rtdata()$bmc[datapoint],2), nsmall = 2)
-          )
-        )
-      )
-    })
+  })
 })
