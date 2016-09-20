@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html>
+<head>
+<style type="text/css">
+body
+{
+margin:  0;
+overflow: hidden;
+}
+
+#myIframe
+{
+height:  100%;
+left:    0px;
+position: absolute;
+top:    0px;
+width:  100%;
+}
+</style>
+
+</head>
+
+<body>
+
+<iframe id="myIframe" frameborder="0"></iframe>
+
+<script type='text/javascript'>
+{
+var loc = window.location.toString();
+var params = loc.split('?')[1];
+var i = document.getElementById('myIframe');
+
+if (params === undefined || params  === null) {
+i.src = "http://witt.null2.net/shiny/wic/";
+} else {
+i.src = "http://witt.null2.net/shiny/wic/" + "?" + params;
+}
+i.frameborder = "0"
+i.position = "fixed";
+i.border = "none";
+i.top = "0";
+i.right = "0";
+i.bottom = "0";
+i.left = "0";
+i.width = "100%";
+i.height = "100%";
+
+document.body.appendChild(i);
+};
+</script>
+
+</body>
+
+</html>
