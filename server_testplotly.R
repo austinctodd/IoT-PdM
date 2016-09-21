@@ -25,19 +25,21 @@ boundedMarkovChain <- function(offset,maxStepSize,upperBound,lowerBound,pdfvals,
   val <- offset
   for (i in 0:(n_sec-1)){
     # Add next value as dependent on current state
-      val <- val + (runif(1,-0.5,.5)*maxStepSize*(1.01-pdfvals[round(val)+1]))
-      # Check bounds
-        val <- min(c(max(c(val,lowerBound)),upperBound))
-        bmchist[min(c(floor(val*10.0)+1,999))] <- bmchist[min(c(floor(val*10.0)+1,999))]+1
-        if (full_output){
-          bmc <- append(bmc,val)
-          times <- append(times,i)
-        } else {
-          if (mod(i,max(c(round(n_sec/1000),1)))==0){
-            bmc <- append(bmc,val)
-            times <- append(times,i)
-          }
-        }
+    set.seed(9)
+    val <- val + (runif(1,-0.5,.5)*maxStepSize*(1.01-pdfvals[round(val)+1]))
+
+    # Check bounds
+    val <- min(c(max(c(val,lowerBound)),upperBound))
+    bmchist[min(c(floor(val*10.0)+1,999))] <- bmchist[min(c(floor(val*10.0)+1,999))]+1
+    if (full_output){
+      bmc <- append(bmc,val)
+      times <- append(times,i)
+    } else {
+      if (mod(i,max(c(round(n_sec/1000),1)))==0){
+        bmc <- append(bmc,val)
+        times <- append(times,i)
+      }
+    }
   }
   return(list("times"=times,"bmc"=bmc,"bmchist"=bmchist))
 }
@@ -58,7 +60,7 @@ shinyServer(function(input, output, session) {
                               maxStepSize=5.5,
                               upperBound=100.0,
                               lowerBound=0.0,
-                              make_temp_pdf(offset,sigma),
+                              pdfvals=make_temp_pdf(offset,sigma),
                               n_sec=input$n_sec
                               )
   })
@@ -141,15 +143,23 @@ shinyServer(function(input, output, session) {
   })
 
   # Update the slider for the normal operating range
-  output$opranges <- renderUI({
+  output$minoprange <- renderUI({
     #Calculate basic statistics (mean, std)
     #tmean<-sum(pltdata()$bmchist*seq(0.05, 99.95, 0.1))/sum(pltdata()$bmchist)
     #tstd <-sqrt(sum(pltdata()$bmchist*((seq(0.05, 99.95, 0.1)-tmean)**2))/sum(pltdata()$bmchist))
-    sliderInput("slider2", "Operating range (C)", min = 0, max = 100,
-                value = c(train_ranges()[1]-(train_ranges()[2]*2),
-                          train_ranges()[1]+(train_ranges()[2]*2)))
+    numericInput("minrange", "Min operating range (C)",
+                value = round(train_ranges()[1]-(train_ranges()[2]*2),1),
+                step = 0.1)
   })
-
+  # Update the slider for the normal operating range
+  output$maxoprange <- renderUI({
+    #Calculate basic statistics (mean, std)
+    #tmean<-sum(pltdata()$bmchist*seq(0.05, 99.95, 0.1))/sum(pltdata()$bmchist)
+    #tstd <-sqrt(sum(pltdata()$bmchist*((seq(0.05, 99.95, 0.1)-tmean)**2))/sum(pltdata()$bmchist))
+    numericInput("maxrange", "Max operating range (C)",
+                value = round(train_ranges()[1]+(train_ranges()[2]*2),1),
+                step = 0.1)
+  })
   # Run test -> must simulate sensor data. Run first, plot as if "real time"
   # Generate new data and test if within normal operating range
   rtdata <- eventReactive(input$startsim,{
@@ -162,7 +172,7 @@ shinyServer(function(input, output, session) {
                               upperBound=100.0,
                               lowerBound=0.0,
                               make_temp_pdf(offset,sigma),
-                              n_sec=7200, #2 hours
+                              n_sec=3600, #1 hours
                               full_output=TRUE
     )
   })
@@ -188,8 +198,8 @@ shinyServer(function(input, output, session) {
                   line=list(color="rgb(250,0,0)")
                 )
     p <- add_trace(p, x=c(rtdata()$times[1]/60,rtdata()$times[length(rtdata()$times)]/60),
-                      y=c(train_ranges()[1]+(2*train_ranges()[2]),
-                          train_ranges()[1]+(2*train_ranges()[2])),
+                      y=c(round(train_ranges()[1]+(2*train_ranges()[2]),1),
+                          round(train_ranges()[1]+(2*train_ranges()[2]),1)),
                       name="Max range",
                       line = list(                        # line is a named list, valid keys: /r/reference/#scatter-line
                               color = "rgb(0, 0, 250,1)",      # line's "color": /r/reference/#scatter-line-color
@@ -198,8 +208,8 @@ shinyServer(function(input, output, session) {
                       )
                   )
     p <- add_trace(p, x=c(rtdata()$times[1]/60,rtdata()$times[length(rtdata()$times)]/60),
-                      y=c(train_ranges()[1]-(2*train_ranges()[2]),
-                          train_ranges()[1]-(2*train_ranges()[2])),
+                      y=c(round(train_ranges()[1]-(2*train_ranges()[2]),1),
+                          round(train_ranges()[1]-(2*train_ranges()[2]),1)),
                       name="Min range",
                       line = list(                        # line is a named list, valid keys: /r/reference/#scatter-line
                               color = "rgb(0, 0, 250,1)",      # line's "color": /r/reference/#scatter-line-color
@@ -207,21 +217,20 @@ shinyServer(function(input, output, session) {
                               width=1                # line's "dash" property: /r/reference/#scatter-line-dash
                       )
                   ) %>%
-      layout(title = "Simulated temperature data",
-                xaxis = list(title = "Time (mins)",
-                             gridcolor = "#bfbfbf",
-                             domain = c(0, 0.98),
-                             range = c(rtdata()$times/60,rtdata()$times[length(rtdata()$times)]/60),
-                             tickfont = list(family='Helvetica', face='italic'),
+      layout(xaxis = list(title = "Time (mins)",
+                          gridcolor = "#bfbfbf",
+                          domain = c(0, 0.98),
+                          range = c(rtdata()$times/60,rtdata()$times[length(rtdata()$times)]/60),
+                          tickfont = list(family='Helvetica', face='italic'),
                              showline=FALSE,
                              zeroline=FALSE,
                              showgrid=FALSE
                              ),
                 yaxis = list(title = "Temperature (C)",
-                             range = c(max(c( 1.0,min(which(pltdata()$bmchist>0),
-                                             (train_ranges()[1]-(2*train_ranges()[2]))*10)/10.0-train_ranges()[2])),
-                                      min(c(99.9,max(which(pltdata()$bmchist>0),
-                                             (train_ranges()[1]+(2*train_ranges()[2]))*10)/10.0+(2*train_ranges()[2])))),
+              #               range = c(max(c( 1.0,min(which(pltdata()$bmchist>0),
+              #                               (train_ranges()[1]-(2*train_ranges()[2]))*10)/10.0-train_ranges()[2])),
+              #                        min(c(99.9,max(which(pltdata()$bmchist>0),
+              #                               (train_ranges()[1]+(2*train_ranges()[2]))*10)/10.0+(2*train_ranges()[2])))),
                              zeroline=FALSE,
                              tickfont = list(family='Helvetica',style='italic'),
                              gridcolor = "#bfbfbf",

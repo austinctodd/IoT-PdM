@@ -34,19 +34,21 @@ boundedMarkovChain <- function(offset,maxStepSize,upperBound,lowerBound,pdfvals,
   val <- offset
   for (i in 0:(n_sec-1)){
     # Add next value as dependent on current state
-      val <- val + (runif(1,-0.5,.5)*maxStepSize*(1.01-pdfvals[round(val)+1]))
-      # Check bounds 
-        val <- min(c(max(c(val,lowerBound)),upperBound))
-        bmchist[min(c(floor(val*10.0)+1,999))] <- bmchist[min(c(floor(val*10.0)+1,999))]+1
-        if (full_output){
-          bmc <- append(bmc,val)
-          times <- append(times,i)
-        } else {
-          if (mod(i,max(c(round(n_sec/1000),1)))==0){
-            bmc <- append(bmc,val)
-            times <- append(times,i)
-          }
-        }
+    val <- val + (runif(1,-0.5,.5)*maxStepSize*(1.01-pdfvals[round(val)+1]))
+    
+    # Check bounds 
+    val <- min(c(max(c(val,lowerBound)),upperBound))
+    bmchist[min(c(floor(val*10.0)+1,999))] <- bmchist[min(c(floor(val*10.0)+1,999))]+1
+    
+    if (full_output){
+      bmc <- append(bmc,val)
+      times <- append(times,i)
+    } else {
+      if (mod(i,max(c(round(n_sec/1000),1)))==0){
+        bmc <- append(bmc,val)
+        times <- append(times,i)
+      }
+    }
   }
   return(list("times"=times,"bmc"=bmc,"bmchist"=bmchist))
 }
