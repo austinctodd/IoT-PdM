@@ -25,7 +25,6 @@ boundedMarkovChain <- function(offset,maxStepSize,upperBound,lowerBound,pdfvals,
   val <- offset
   for (i in 0:(n_sec-1)){
     # Add next value as dependent on current state
-    set.seed(9)
     val <- val + (runif(1,-0.5,.5)*maxStepSize*(1.01-pdfvals[round(val)+1]))
 
     # Check bounds
@@ -42,6 +41,24 @@ boundedMarkovChain <- function(offset,maxStepSize,upperBound,lowerBound,pdfvals,
     }
   }
   return(list("times"=times,"bmc"=bmc,"bmchist"=bmchist))
+}
+
+justtheerrors <- function(data,ranges){
+  minrange <- round(ranges[1]-(2*ranges[2]),1)
+  maxrange <- round(ranges[1]+(2*ranges[2]),1)
+  df <- data.frame(cbind(data$times,data$bmc,sign(data$bmc-minrange),sign(data$bmc-maxrange)))
+  colnames(df)<- c('Time','Temp','Type','high')
+
+  if (length(which(((df$Type<=0)|(df$high >=0))==TRUE))>0){
+    df2 <- df[(df$Type<=0)|(df$high >=0),]
+    df2$Type <- "LOW"
+    df2$Type[df2$high>0] <- "HIGH"
+    return(cbind(round(df2$Time/60,2),round(df2$Temp,2),df2$Type))
+  } else {
+    df <- data.frame(cbind(NaN,NaN,'N/A'))
+    colnames(df) <- c('Time','Temp','Type')
+    return(cbind(df$Time,df$Temp,df$Type))
+  }
 }
 
 shinyServer(function(input, output, session) {
@@ -241,6 +258,13 @@ shinyServer(function(input, output, session) {
             )
     p
   })
+
+
+  output$tabledata = DT::renderDataTable(justtheerrors(rtdata(),train_ranges()),
+                                          colnames=c('Time','Temp','Type'),
+                                          options=list(pageLength=20),
+                                          server = FALSE)
+
 
   # Coupled hover event
   output$gague <- renderPlotly({

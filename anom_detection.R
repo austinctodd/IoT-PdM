@@ -12,7 +12,10 @@ tagList(
   br(),
   actionButton("startsim","Start"),
   #actionButton("stopsim","Stop!"),
-  plotlyOutput("timeseries",height="300px",width="100%"),
+  fluidRow(
+    column(width=8,plotlyOutput("timeseries",height="300px",width="100%")),
+    column(width=4,DT::dataTableOutput('tabledata'))
+  ),
   br()
 
 )
