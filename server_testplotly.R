@@ -8,6 +8,7 @@ library(ggplot2)
 library(xts)
 library(plotly)
 
+
 # Create function for estimating likelihood of greater increase/decrease
 make_temp_pdf <- function(offset,sigma){
   pdfvals <- c()
@@ -23,6 +24,8 @@ boundedMarkovChain <- function(offset,maxStepSize,upperBound,lowerBound,pdfvals,
   times <- c()
   bmchist <- integer(1000)
   val <- offset
+  set.seed(as.numeric(Sys.time()))
+  
   for (i in 0:(n_sec-1)){
     # Add next value as dependent on current state
     val <- val + (runif(1,-0.5,.5)*maxStepSize*(1.01-pdfvals[round(val)+1]))
@@ -194,6 +197,10 @@ shinyServer(function(input, output, session) {
     )
   })
 
+  rt_regress <- reactive({
+    model <- lm(rtdata()$bmc ~ poly(rtdata()$times,input$trendorder))
+  })
+  
   values <- reactiveValues(a=0,run=0)
 
   observeEvent(input$stopsim,{
@@ -259,13 +266,71 @@ shinyServer(function(input, output, session) {
     p
   })
 
-
+  output$trendline <- renderPlotly({
+    
+    p <- plot_ly(rtdata(),x = times/60, y = bmc,
+                 mode = "lines",
+                 hovermode = "closest",
+                 source = "source",
+                 name="temperature",
+                 line=list(color="rgb(250,0,0)")
+    )
+    p <- add_trace(p, x=c(rtdata()$times[1]/60,rtdata()$times[length(rtdata()$times)]/60),
+                   y=c(round(train_ranges()[1]+(2*train_ranges()[2]),1),
+                       round(train_ranges()[1]+(2*train_ranges()[2]),1)),
+                   name="Max range",
+                   line = list(                        # line is a named list, valid keys: /r/reference/#scatter-line
+                     color = "rgb(0, 0, 250,1)",      # line's "color": /r/reference/#scatter-line-color
+                     dash = 5,
+                     width=1                 # line's "dash" property: /r/reference/#scatter-line-dash
+                   )
+    )
+    p <- add_trace(p, x=c(rtdata()$times[1]/60,rtdata()$times[length(rtdata()$times)]/60),
+                   y=c(round(train_ranges()[1]-(2*train_ranges()[2]),1),
+                       round(train_ranges()[1]-(2*train_ranges()[2]),1)),
+                   name="Min range",
+                   line = list(                        # line is a named list, valid keys: /r/reference/#scatter-line
+                     color = "rgb(0, 0, 250,1)",      # line's "color": /r/reference/#scatter-line-color
+                     dash = 5,
+                     width=1                # line's "dash" property: /r/reference/#scatter-line-dash
+                   )
+    )
+    p <- add_trace(p, x=rtdata()$times/60,
+                   y=fitted(rt_regress()),
+                   name="Regression",
+                   line = list(                        # line is a named list, valid keys: /r/reference/#scatter-line
+                     color = "rgb(0, 0, 0,1)"      # line's "color": /r/reference/#scatter-line-color
+                   )
+    )%>%
+      layout(xaxis = list(title = "Time (mins)",
+                          gridcolor = "#bfbfbf",
+                          domain = c(0, 0.98),
+                          range = c(rtdata()$times/60,rtdata()$times[length(rtdata()$times)]/60),
+                          tickfont = list(family='Helvetica', face='italic'),
+                          showline=FALSE,
+                          zeroline=FALSE,
+                          showgrid=FALSE
+      ),
+      yaxis = list(title = "Temperature (C)",
+                   #               range = c(max(c( 1.0,min(which(pltdata()$bmchist>0),
+                   #                               (train_ranges()[1]-(2*train_ranges()[2]))*10)/10.0-train_ranges()[2])),
+                   #                        min(c(99.9,max(which(pltdata()$bmchist>0),
+                   #                               (train_ranges()[1]+(2*train_ranges()[2]))*10)/10.0+(2*train_ranges()[2])))),
+                   zeroline=FALSE,
+                   tickfont = list(family='Helvetica',style='italic'),
+                   gridcolor = "#bfbfbf",
+                   linetype="dashed"
+      ),
+      showlegend=FALSE,
+      font = list(family='Helvetica',style='italic')
+      )
+    p
+  })
+  
   output$tabledata = DT::renderDataTable(justtheerrors(rtdata(),train_ranges()),
                                           colnames=c('Time','Temp','Type'),
                                           options=list(pageLength=20),
                                           server = FALSE)
-
-
   # Coupled hover event
   output$gague <- renderPlotly({
 

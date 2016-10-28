@@ -3,6 +3,7 @@ library(dygraphs)
 library(stringr)
 library(plyr)
 library(dplyr)
+library(plotly)
 
 shinyUI(
   navbarPage(
@@ -23,16 +24,16 @@ shinyUI(
       fluidRow(
         column(width=4,numericInput("n_sec","Sensor observation time (in sec)",86400)),
         #column(width=4,numericInput("n_freq","Observation frequency (in sec)",1)),
-        column(width=8,br(),actionButton("gettraining", "Generate training data", icon("line-chart"), 
+        column(width=8,br(),actionButton("gettraining", "Generate training data", icon("line-chart"),
                                   style="color: #fff; background-color: #337ab7; border-color: #2e6da4"))
-      ),      
+      ),
       fluidRow(
         column(width=9,plotOutput("trainplot",height="300px",width="100%")),
         column(width=3,plotOutput("trainhist",height="300px",width="100%"))
       ),
       hr(),
       tabsetPanel(
-        type = "tabs", 
+        type = "tabs",
         tabPanel("Smart Monitoring",br(),
           tabsetPanel(
             type="pills",
@@ -41,7 +42,7 @@ shinyUI(
             tabPanel("Trend Analysis",br(),source("trend_analysis.R",local=TRUE)$value)
 #       tabPanel("PCA",br(),source("anom_PCA.R",local=TRUE)$value)
           )
-        ), 
+        ),
         tabPanel("Prediction",br(),source("anom_prediction.R",local=TRUE)$value)
       ),
       br(),
@@ -50,4 +51,3 @@ shinyUI(
   )
 
 )
-
