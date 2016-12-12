@@ -5,6 +5,9 @@ library(plyr)
 library(dplyr)
 library(plotly)
 
+# Add switch button functionality
+source("src/SwitchButton.R")
+
 shinyUI(
   navbarPage(
     title="",
@@ -32,18 +35,19 @@ shinyUI(
         column(width=3,plotOutput("trainhist",height="300px",width="100%"))
       ),
       hr(),
-      tabsetPanel(
-        type = "tabs",
+ #     tabsetPanel(
+ #       type = "tabs",
         tabPanel("Smart Monitoring",br(),
           tabsetPanel(
-            type="pills",
+            type="tabs",
+#            type="pills",
             selected = NULL,
             tabPanel("Anomaly Detection",br(),source("anom_detection.R",local=TRUE)$value),
-            tabPanel("Trend Analysis",br(),source("trend_analysis.R",local=TRUE)$value)
+            tabPanel("Trend Analysis & Prediction",br(),source("trend_analysis.R",local=TRUE)$value)
 #       tabPanel("PCA",br(),source("anom_PCA.R",local=TRUE)$value)
-          )
-        ),
-        tabPanel("Prediction",br(),source("anom_prediction.R",local=TRUE)$value)
+#          )
+        )#,
+#        tabPanel("Prediction",br(),source("anom_prediction.R",local=TRUE)$value)
       ),
       br(),
       includeCSS("style.css")

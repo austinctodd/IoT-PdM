@@ -7,7 +7,7 @@ library(curl) # make the jsonlite suggested dependency explicit
 library(ggplot2)
 library(xts)
 library(plotly)
-
+library(forecast)
 
 # Create function for estimating likelihood of greater increase/decrease
 make_temp_pdf <- function(offset,sigma){
@@ -69,7 +69,8 @@ shinyServer(function(input, output, session) {
   #---------------------------------------------------
   # Add functionality for plotting data using dygraph
   #---------------------------------------------------
-
+  values <- reactiveValues(run=0,polyorder=1)
+  
   # Reactive data for updated time series
   pltdata <- eventReactive(input$gettraining,{
     # Some Info to construct Bounded Markov Chain
@@ -155,8 +156,8 @@ shinyServer(function(input, output, session) {
       theme(text = element_text(color = "gray10"),
             axis.text = element_text(face = "italic",size=10),
             axis.title.x = element_text(vjust = -3, size=14), # move title away from axis
-            axis.title.y = element_blank(),# move away for axis
-            axis.text.y  = element_blank(),# remove y ticks
+            axis.title.y = element_blank(), # move away for axis
+            axis.text.y  = element_blank(), # remove y ticks
             panel.grid.major.y=element_line(colour="black", linetype = "dashed"),
             panel.grid.major.x=element_blank()
       )
@@ -167,7 +168,7 @@ shinyServer(function(input, output, session) {
     #Calculate basic statistics (mean, std)
     #tmean<-sum(pltdata()$bmchist*seq(0.05, 99.95, 0.1))/sum(pltdata()$bmchist)
     #tstd <-sqrt(sum(pltdata()$bmchist*((seq(0.05, 99.95, 0.1)-tmean)**2))/sum(pltdata()$bmchist))
-    numericInput("minrange", "Min operating range (C)",
+    numericInput("minrange", "Lower limit (C)",
                 value = round(train_ranges()[1]-(train_ranges()[2]*2),1),
                 step = 0.1)
   })
@@ -176,13 +177,25 @@ shinyServer(function(input, output, session) {
     #Calculate basic statistics (mean, std)
     #tmean<-sum(pltdata()$bmchist*seq(0.05, 99.95, 0.1))/sum(pltdata()$bmchist)
     #tstd <-sqrt(sum(pltdata()$bmchist*((seq(0.05, 99.95, 0.1)-tmean)**2))/sum(pltdata()$bmchist))
-    numericInput("maxrange", "Max operating range (C)",
+    numericInput("maxrange", "Upper limit (C)",
                 value = round(train_ranges()[1]+(train_ranges()[2]*2),1),
                 step = 0.1)
   })
+  
+  # Functionality for simulation action buttons
+  observeEvent(input$startsim,{
+    values$run <- abs(isolate(values$run)-1)
+  })
+  observeEvent(input$trendsim,{
+    values$run <- abs(isolate(values$run)-1)
+  })
+  observeEvent(input$forecast,{
+    values$run <- abs(isolate(values$run)-1)
+  })
+  
   # Run test -> must simulate sensor data. Run first, plot as if "real time"
   # Generate new data and test if within normal operating range
-  rtdata <- eventReactive(input$startsim,{
+  rtdata <- eventReactive(values$run,{
     # Some Info to construct Bounded Markov Chain
     stepSize=2.0 #log10(input$n_sec)
     sigma=stepSize*7.5
@@ -192,25 +205,33 @@ shinyServer(function(input, output, session) {
                               upperBound=100.0,
                               lowerBound=0.0,
                               make_temp_pdf(offset,sigma),
-                              n_sec=3600, #1 hours
+                              n_sec=7200, #1 hours
                               full_output=TRUE
     )
   })
-
-  rt_regress <- reactive({
-    model <- lm(rtdata()$bmc ~ poly(rtdata()$times,input$trendorder))
+  
+  # Observe if user changes the order of the polynomial trend fit
+  observeEvent(input$trendorder,{
+    values$polyorder <- input$trendorder  
   })
   
-  values <- reactiveValues(a=0,run=0)
-
-  observeEvent(input$stopsim,{
-    values$a <-0
-    values$run <- abs(isolate(values$run)-1)
+  # Calculate regression of
+  rt_regress <- reactive({
+    ts <- ts(rtdata()$bmc,start=0,end=7200)
+    model <- lm(rtdata()$bmc ~ poly(rtdata()$times,values$polyorder))
   })
-  observeEvent(input$startsim,{
-    values$run <- abs(isolate(values$run)-1)
+  
+  rt_predict <- reactive({
+    # Calculate regression 
+    dataset <- rtdata()
+    time <- dataset$times
+    model <- lm(dataset$bmc~ poly(time,values$polyorder))
+    dataset$regression <- fitted(model)
+    newtime <- data.frame(time=max(time)+seq(1,600,1))
+    predictions <- predict(model, newtime, interval="prediction")
+    predictions <- data.frame(cbind(newtime,predictions))
   })
-
+  
   # Plot time series chart
   output$timeseries <- renderPlotly({
 
@@ -241,32 +262,119 @@ shinyServer(function(input, output, session) {
                               width=1                # line's "dash" property: /r/reference/#scatter-line-dash
                       )
                   ) %>%
-      layout(xaxis = list(title = "Time (mins)",
-                          gridcolor = "#bfbfbf",
-                          domain = c(0, 0.98),
-                          range = c(rtdata()$times/60,rtdata()$times[length(rtdata()$times)]/60),
-                          tickfont = list(family='Helvetica', face='italic'),
-                             showline=FALSE,
-                             zeroline=FALSE,
-                             showgrid=FALSE
-                             ),
-                yaxis = list(title = "Temperature (C)",
-              #               range = c(max(c( 1.0,min(which(pltdata()$bmchist>0),
-              #                               (train_ranges()[1]-(2*train_ranges()[2]))*10)/10.0-train_ranges()[2])),
-              #                        min(c(99.9,max(which(pltdata()$bmchist>0),
-              #                               (train_ranges()[1]+(2*train_ranges()[2]))*10)/10.0+(2*train_ranges()[2])))),
-                             zeroline=FALSE,
-                             tickfont = list(family='Helvetica',style='italic'),
-                             gridcolor = "#bfbfbf",
-                             linetype="dashed"
-                             ),
-                showlegend=FALSE,
-                font = list(family='Helvetica',style='italic')
-            )
+    layout(xaxis = list(title = "Time (mins)",
+                        gridcolor = "#bfbfbf",
+                        domain = c(0, 0.98),
+                        range = c(rtdata()$times/60,rtdata()$times[length(rtdata()$times)]/60),
+                        tickfont = list(family='Helvetica', face='italic'),
+                        showline=FALSE,
+                        zeroline=FALSE,
+                        showgrid=FALSE
+                        ),
+            yaxis = list(title = "Temperature (C)",
+                         zeroline=FALSE,
+                         tickfont = list(family='Helvetica',style='italic'),
+                         gridcolor = "#bfbfbf",
+                         linetype="dashed"
+                         ),
+            showlegend=FALSE,
+            font = list(family='Helvetica',style='italic')
+      )
     p
   })
-
+  
+  # Include anomaly table
+  output$tabledata = DT::renderDataTable(justtheerrors(rtdata(),train_ranges()),
+                                         colnames=c('Time','Temp','Type'),
+                                         options=list(pageLength=20),
+                                         server = FALSE)
+  
+  # Plot the time series chart with regression
   output$trendline <- renderPlotly({
+    
+    trange <- c(rtdata()$times[1]/60,rtdata()$times[length(rtdata()$times)]/60)
+    p <- plot_ly(rtdata(),x = times/60, y = bmc,
+                 mode = "lines",
+                 hovermode = "closest",
+                 source = "source",
+                 name="temperature",
+                 line=list(color="rgb(250,0,0)")
+    )
+    p <- add_trace(p, x=rtdata()$times/60,
+                   y=fitted(rt_regress()),
+                   name="Regression",
+                   line = list(                        # line is a named list, valid keys: /r/reference/#scatter-line
+                     color = "rgb(0, 0, 0,1)"      # line's "color": /r/reference/#scatter-line-color
+                   )
+    )
+    if (input$fcaston==1){
+      p <- add_trace(p, x=rt_predict()$time/60,
+                        y=rt_predict()$fit,
+                        name="Prediction",
+                        line = list(                        # line is a named list, valid keys: /r/reference/#scatter-line
+                          color = "rgb(0, 0, 0, 1)"      # line's "color": /r/reference/#scatter-line-color
+                        )
+                     )%>%
+            add_trace(x = rt_predict()$time/60, 
+                      y = rt_predict()$upr, 
+                      type = 'scatter', 
+                      mode = 'lines',
+                      line = list(color = 'transparent'),
+                      showlegend = FALSE, 
+                      name = 'Prediction Interval') %>%
+            add_trace(x = rt_predict()$time/60, 
+                      y = rt_predict()$lwr, 
+                      type = 'scatter', 
+                      mode = 'lines',
+                      fill = 'tonexty', 
+                      fillcolor='rgba(0,0,0,0.3)', 
+                      line = list(color = 'transparent'),
+                      showlegend = FALSE, 
+                      name = 'Prediction Interval')
+     trange[2] <- max(rt_predict()$time)/60
+    }
+    p <- add_trace(p, x=trange,
+                   y=c(round(train_ranges()[1]+(2*train_ranges()[2]),1),
+                       round(train_ranges()[1]+(2*train_ranges()[2]),1)),
+                   name="Max range",
+                   line = list(                        # line is a named list, valid keys: /r/reference/#scatter-line
+                     color = "rgb(0, 0, 250,1)",      # line's "color": /r/reference/#scatter-line-color
+                     dash = 5,
+                     width=1                 # line's "dash" property: /r/reference/#scatter-line-dash
+                   )
+    )
+    p <- add_trace(p, x=trange,
+                   y=c(round(train_ranges()[1]-(2*train_ranges()[2]),1),
+                       round(train_ranges()[1]-(2*train_ranges()[2]),1)),
+                   name="Min range",
+                   line = list(                        # line is a named list, valid keys: /r/reference/#scatter-line
+                     color = "rgb(0, 0, 250,1)",      # line's "color": /r/reference/#scatter-line-color
+                     dash = 5,
+                     width=1                # line's "dash" property: /r/reference/#scatter-line-dash
+                   )
+    )%>%
+    layout(xaxis = list(title = "Time (mins)",
+                        gridcolor = "#bfbfbf",
+                        domain = c(0, 0.98),
+                        range = trange,
+                        tickfont = list(family='Helvetica', face='italic'),
+                        showline=FALSE,
+                        zeroline=FALSE,
+                        showgrid=FALSE
+                        ),
+            yaxis = list(title = "Temperature (C)",
+                         zeroline=FALSE,
+                         tickfont = list(family='Helvetica',style='italic'),
+                         gridcolor = "#bfbfbf",
+                         linetype="dashed"
+                        ),
+            showlegend=FALSE,
+            font = list(family='Helvetica',style='italic')
+      )
+  })
+  
+  # Plot the time series with regression and prediction
+  output$trendforecast <- renderPlotly({
     
     p <- plot_ly(rtdata(),x = times/60, y = bmc,
                  mode = "lines",
@@ -312,10 +420,6 @@ shinyServer(function(input, output, session) {
                           showgrid=FALSE
       ),
       yaxis = list(title = "Temperature (C)",
-                   #               range = c(max(c( 1.0,min(which(pltdata()$bmchist>0),
-                   #                               (train_ranges()[1]-(2*train_ranges()[2]))*10)/10.0-train_ranges()[2])),
-                   #                        min(c(99.9,max(which(pltdata()$bmchist>0),
-                   #                               (train_ranges()[1]+(2*train_ranges()[2]))*10)/10.0+(2*train_ranges()[2])))),
                    zeroline=FALSE,
                    tickfont = list(family='Helvetica',style='italic'),
                    gridcolor = "#bfbfbf",
@@ -326,11 +430,7 @@ shinyServer(function(input, output, session) {
       )
     p
   })
-  
-  output$tabledata = DT::renderDataTable(justtheerrors(rtdata(),train_ranges()),
-                                          colnames=c('Time','Temp','Type'),
-                                          options=list(pageLength=20),
-                                          server = FALSE)
+
   # Coupled hover event
   output$gague <- renderPlotly({
 
